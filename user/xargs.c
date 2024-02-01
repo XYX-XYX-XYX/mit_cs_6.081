@@ -25,6 +25,7 @@ main(int argc , char** argv)
             k = 0;
             i++;
         }else if( *c == '\n' ){
+            buf[i][k] = '\0';
             argm[i] = buf[i];
             i++;
             k=0;
