@@ -1,0 +1,5 @@
+usertrap ()
+7 SYS_exec user mode
+lw a3,0 a3
+
+initcode 1
