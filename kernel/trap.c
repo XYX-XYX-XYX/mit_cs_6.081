@@ -72,20 +72,22 @@ usertrap(void)
     if((pte = walk(p->pagetable,va,0)) == 0){
       panic("usertrap:walk\n");
     }
-      uint64 pa = PTE2PA(*pte);
     if((*pte & PTE_COW) == 0){
       printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
       printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
       setkilled(p);
     }else{
       char *mem;
-      if((mem = kalloc()) == 0)
-      setkilled(p);
+      uint64 pa = PTE2PA(*pte);
+
+      if((mem = kalloc()) == 0){
+        setkilled(p);
+      }
       else{
         uint64 flags = PTE_FLAGS(*pte);
-        flags = flags | PTE_W;
+        flags = (flags | PTE_W) ^ PTE_COW;
+        memmove(mem, (void *)pa, PGSIZE);
         uvmunmap(p->pagetable, va, 1, 1);
-        memset(mem, pa, PGSIZE);
         mappages(p->pagetable, va, PGSIZE, (uint64)mem, flags);
       }
     }

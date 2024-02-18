@@ -63,6 +63,9 @@ void            ramdiskrw(struct buf*);
 void*           kalloc(void);
 void            kfree(void *);
 void            kinit(void);
+void            pagecountinit(void);
+void            *pagecountinc(void *pa);
+int             pagecountdec(void *pa);
 
 // log.c
 void            initlog(int, struct superblock*);

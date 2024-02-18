@@ -23,6 +23,11 @@ struct {
   struct run *freelist;
 } kmem;
 
+struct {
+  struct spinlock lock;
+  int pacount[TOTALPAGE];
+} pagecount;
+
 void
 kinit()
 {
@@ -35,9 +40,11 @@ freerange(void *pa_start, void *pa_end)
 {
   char *p;
   p = (char*)PGROUNDUP((uint64)pa_start);
-  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
+  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE){
+    pagecountinc((void*)p);
     kfree(p);
-}
+  }
+ }
 
 // Free the page of physical memory pointed at by pa,
 // which normally should have been returned by a
@@ -51,15 +58,16 @@ kfree(void *pa)
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
 
-  // Fill with junk to catch dangling refs.
-  memset(pa, 1, PGSIZE);
+  if(pagecountdec((void *)pa) == 0){
+    //printf("%p, %d, %d\n",pa, (((uint64)pa - KERNBASE) / PGSIZE), pagecount.pacount[((uint64)pa - KERNBASE) / PGSIZE]);
+    memset(pa, 1, PGSIZE);
+    r = (struct run*)pa;
+    acquire(&kmem.lock);
+    r->next = kmem.freelist;
+    kmem.freelist = r;
+    release(&kmem.lock);
+  }
 
-  r = (struct run*)pa;
-
-  acquire(&kmem.lock);
-  r->next = kmem.freelist;
-  kmem.freelist = r;
-  release(&kmem.lock);
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -78,5 +86,40 @@ kalloc(void)
 
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
+  
+  if(r)
+    pagecountinc((void*)r);
   return (void*)r;
+}
+
+void 
+pagecountinit()
+{
+  int i = 0;
+  initlock(&pagecount.lock,"pagecount");
+  acquire(&pagecount.lock);
+  for(i = 0; i < (PHYSTOP-KERNBASE) / PGSIZE; i++){
+    pagecount.pacount[i] = 0;
+  }
+  //printf("%d\n",i);
+  release(&pagecount.lock);
+}
+
+void *
+pagecountinc(void *pa)
+{
+  acquire(&pagecount.lock);
+  pagecount.pacount[((uint64)pa - KERNBASE) / PGSIZE]++;
+  //printf("%p, %d, %d\n",pa, (((uint64)pa - KERNBASE) / PGSIZE), pagecount.pacount[((uint64)pa - KERNBASE) / PGSIZE]);
+  release(&pagecount.lock);
+  return pa;
+}
+
+int 
+pagecountdec(void *pa)
+{
+  acquire(&pagecount.lock);
+  pagecount.pacount[((uint64)pa - KERNBASE) / PGSIZE]--;
+  release(&pagecount.lock);
+  return pagecount.pacount[((uint64)pa - KERNBASE) / PGSIZE]; 
 }
