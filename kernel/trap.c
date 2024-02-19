@@ -13,6 +13,7 @@ extern char trampoline[], uservec[], userret[];
 
 // in kernelvec.S, calls kerneltrap().
 void kernelvec();
+int uncopied_cow(pagetable_t pgtbl, uint64 va);
 
 extern int devintr();
 
@@ -65,32 +66,25 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if(r_scause() == 15){
+  } else if(r_scause() == 15 && uncopied_cow(p->pagetable, r_stval())){
     p->trapframe->epc = r_sepc();
     uint64 va = PGROUNDDOWN(r_stval());
     pte_t *pte;
     if((pte = walk(p->pagetable,va,0)) == 0){
       panic("usertrap:walk\n");
     }
-    if((*pte & PTE_COW) == 0){
-      printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
-      printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
-      setkilled(p);
-    }else{
       char *mem;
       uint64 pa = PTE2PA(*pte);
 
       if((mem = kalloc()) == 0){
         setkilled(p);
-      }
-      else{
+      }else{
         uint64 flags = PTE_FLAGS(*pte);
         flags = (flags | PTE_W) ^ PTE_COW;
         memmove(mem, (void *)pa, PGSIZE);
         uvmunmap(p->pagetable, va, 1, 1);
         mappages(p->pagetable, va, PGSIZE, (uint64)mem, flags);
       }
-    }
   }else if((which_dev = devintr()) != 0){
     // ok
   } else {
@@ -245,3 +239,15 @@ devintr()
   }
 }
 
+int uncopied_cow(pagetable_t pgtbl, uint64 va){
+  if(va >= MAXVA) 
+    return 0;
+  pte_t* pte = walk(pgtbl, va, 0);
+  if(pte == 0)             // 如果这个页不存在
+    return 0;
+  if((*pte & PTE_V) == 0)
+    return 0;
+  if((*pte & PTE_U) == 0)
+    return 0;
+  return ((*pte) & PTE_COW); // 有 PTE_C 的代表还没复制过，并且是 cow 页
+}

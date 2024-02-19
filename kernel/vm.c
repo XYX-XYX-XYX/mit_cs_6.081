@@ -366,6 +366,26 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
     if(va0 >= MAXVA)
       return -1;
     pte = walk(pagetable, va0, 0);
+    if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0)
+      return -1;
+    if(((*pte & PTE_W) == 0) && (*pte & PTE_COW)){
+      //printf("%p\n",*pte);
+      char *mem;
+      uint64 pa = PTE2PA(*pte);
+
+      if((mem = kalloc()) == 0){
+        setkilled(myproc());
+      }else{
+        uint64 flags = PTE_FLAGS(*pte);
+        flags = (flags | PTE_W) ^ PTE_COW;
+        memmove(mem, (void *)pa, PGSIZE);
+        uvmunmap(pagetable, va0, 1, 1);
+        mappages(pagetable, va0, PGSIZE, (uint64)mem, flags);
+      }
+    }else if(((*pte & PTE_W) == 0) && ((*pte & PTE_COW) == 0)){
+      return -1;
+    }
+    pte = walk(pagetable, va0, 0);
     if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0 ||
        (*pte & PTE_W) == 0)
       return -1;
