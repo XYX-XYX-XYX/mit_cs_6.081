@@ -24,16 +24,12 @@ ping(uint16 sport, uint16 dport, int attempts)
   if((fd = connect(dst, sport, dport)) < 0){
     fprintf(2, "ping: connect() failed\n");
     exit(1);
-  }else{
-    fprintf(2,"ping: connect success\n");
   }
 
   for(int i = 0; i < attempts; i++) {
     if(write(fd, obuf, strlen(obuf)) < 0){
       fprintf(2, "ping: send() failed\n");
       exit(1);
-    }else{
-      fprintf(2,"ping: send()%d success\n",i);
     }
   }
 
