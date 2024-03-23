@@ -63,21 +63,27 @@ testsymlink(void)
   printf("Start: test symlinks\n");
 
   mkdir("/testsymlink");
+  //printf("mkdir ok!\n");
 
   fd1 = open("/testsymlink/a", O_CREATE | O_RDWR);
+  //printf("open ok\n");
   if(fd1 < 0) fail("failed to open a");
 
   r = symlink("/testsymlink/a", "/testsymlink/b");
+  printf("symlink ok!\n");
   if(r < 0)
     fail("symlink b -> a failed");
 
   if(write(fd1, buf, sizeof(buf)) != 4)
     fail("failed to write to a");
-
+  //printf("write to a ok!\n"); 
   if (stat_slink("/testsymlink/b", &st) != 0)
     fail("failed to stat b");
-  if(st.type != T_SYMLINK)
+  if(st.type != T_SYMLINK){
+    printf("%d\n",st.type);
     fail("b isn't a symlink");
+  }
+    
 
   fd2 = open("/testsymlink/b", O_RDWR);
   if(fd2 < 0)
