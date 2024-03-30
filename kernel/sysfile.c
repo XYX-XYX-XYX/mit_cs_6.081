@@ -503,3 +503,50 @@ sys_pipe(void)
   }
   return 0;
 }
+
+uint64
+sys_mmap(void)
+{
+  uint64 addr;
+  size_t len ;
+  int prot, flags, fd;
+  struct file *f;
+  off_t offset;
+  struct proc *proc = myproc();
+
+  argaddr(0, &addr);
+  argaddr(1, &len);
+  argint(2, &prot);
+  argint(3, &flags);
+  argaddr(5, (uint64*)&offset);
+  if((argfd(4, &fd, &f)) == -1)
+    return -1;
+
+  //find unused address space and map it to pa 0;
+  uint64 oldsz = PGROUNDUP(proc->sz);
+  uint64 newsz = oldsz;
+  proc->sz += oldsz + len;
+  pte_t *pte;
+  for(size_t i = len; i > 0; i -= PGSIZE){
+    pte = walk(proc->pagetable, newsz, 1);
+    *pte = PA2PTE(0) | PTE_V | PTE_U;
+    newsz = newsz + PGSIZE;
+  }
+  // give process vma
+  proc->vmas[fd].addr = oldsz;
+  proc->vmas[fd].fd = fd;
+  proc->vmas[fd].flags = flags;
+  proc->vmas[fd].prot = prot;
+  proc->vmas[fd].len = len;
+  proc->vmas[fd].offset = offset;
+  proc->vmas[fd].f = f;
+  filedup(f);
+
+  return oldsz;
+}
+
+uint64
+sys_munmap(void)
+{
+  return -1;
+}
