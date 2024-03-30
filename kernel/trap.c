@@ -91,6 +91,7 @@ usertrap(void)
         p->vmas[i].offset += total;
         if(total != PGSIZE){
           memset((void*)pa+total, 0, PGSIZE - total);
+          p->vmas[i].offset += PGSIZE - total;
         }
         iunlock(f->ip);
         break;

@@ -521,7 +521,9 @@ sys_mmap(void)
   argaddr(5, (uint64*)&offset);
   if((argfd(4, &fd, &f)) == -1)
     return -1;
-
+  //doesn't allow read/write mapping of a 
+  //file opened read-only.
+  if(!f->writable && (flags & MAP_SHARED) &&(prot & PROT_WRITE)) return -1;
   //find unused address space and map it to pa 0;
   uint64 oldsz = PGROUNDUP(proc->sz);
   uint64 newsz = oldsz;
@@ -532,14 +534,23 @@ sys_mmap(void)
     *pte = PA2PTE(0) | PTE_V | PTE_U;
     newsz = newsz + PGSIZE;
   }
+  //find an unused vma
+  struct vma * vma = 0;
+  for(int i = 0; i <= NVMA; i++){
+    if(proc->vmas[i].addr == 0){
+      vma = proc->vmas + i;
+      break;
+    }
+  }
   // give process vma
-  proc->vmas[fd].addr = oldsz;
-  proc->vmas[fd].fd = fd;
-  proc->vmas[fd].flags = flags;
-  proc->vmas[fd].prot = prot;
-  proc->vmas[fd].len = len;
-  proc->vmas[fd].offset = offset;
-  proc->vmas[fd].f = f;
+  vma->addr = oldsz;
+  //printf("%d,%p\n",fd,oldsz);
+  vma->fd = fd;
+  vma->flags = flags;
+  vma->prot = prot;
+  vma->len = len;
+  vma->offset = offset;
+  vma->f = f;
   filedup(f);
 
   return oldsz;
@@ -548,5 +559,45 @@ sys_mmap(void)
 uint64
 sys_munmap(void)
 {
-  return -1;
+  uint64 addr;
+  size_t len;
+  int i;
+  struct proc *p = myproc();
+
+  argaddr(0, &addr);
+  addr = PGROUNDDOWN(addr);
+  //uint64 pa = walkaddr(p->pagetable, addr);
+  //if(pa == 0)return 0;
+  argaddr(1, &len);
+  //find the vma you free
+  for(i = 0; i < NVMA; i++){
+    if((addr >= p->vmas[i].addr) && (addr <= (p->vmas[i].addr + p->vmas[i].len)))
+      break;
+  }
+  for(int j = 0; j < len/PGSIZE; j++){
+    uint64 pa = walkaddr(p->pagetable, addr+j*PGSIZE);
+    if(pa){
+      if(p->vmas[i].flags && MAP_SHARED){
+        filewrite(p->vmas[i].f, addr+PGSIZE*j, PGSIZE);
+      }
+      uvmunmap(p->pagetable, addr+PGSIZE*j, 1, 1);
+    }else{
+      uvmunmap(p->pagetable, addr+PGSIZE*j, 1, 0);
+    }
+  }
+  if(len == p->vmas[i].len){
+    printf("unmmap totally!\n");
+    fileclose(p->vmas[i].f);
+    p->vmas[i].addr = 0;
+    p->vmas[i].f = 0;
+    p->vmas[i].fd = 0;
+    p->vmas[i].flags = 0;
+    p->vmas[i].len = 0;
+    p->vmas[i].offset = 0;
+    p->vmas[i].prot = 0;
+  }else{
+    p->vmas[i].addr = addr + len;
+    p->vmas[i].len -= len;
+  }
+  return 0;
 }
