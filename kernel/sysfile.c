@@ -521,19 +521,18 @@ sys_mmap(void)
   argaddr(5, (uint64*)&offset);
   if((argfd(4, &fd, &f)) == -1)
     return -1;
-  //printf("sys_mmap %d %p\n",fd, f);
   //doesn't allow read/write mapping of a 
   //file opened read-only.
   if(!f->writable && (flags & MAP_SHARED) &&(prot & PROT_WRITE)) return -1;
   //find unused address space and map it to pa 0;
   uint64 oldsz = PGROUNDUP(proc->sz);
   uint64 newsz = oldsz;
-  //printf("%p,%p,%p\n",proc->sz, oldsz, oldsz + len);
+
   proc->sz = oldsz + len;
   pte_t *pte;
   for(size_t i = len; i > 0; i -= PGSIZE){
     pte = walk(proc->pagetable, newsz, 1);
-    *pte = PA2PTE(0) | PTE_V | PTE_U;
+    *pte = PA2PTE(0) | PTE_V | PTE_U | PTE_M;
     newsz = newsz + PGSIZE;
   }
   //find an unused vma
@@ -546,15 +545,14 @@ sys_mmap(void)
   }
   // give process vma
   vma->addr = oldsz;
-  //printf("%d,%p\n",fd,oldsz);
   vma->fd = fd;
   vma->flags = flags;
   vma->prot = prot;
   vma->len = len;
   vma->offset = offset;
   vma->f = f;
+  vma->ummap = 0;
   filedup(f);
-  //printf("sys_mmap: %d\n",f->ref);
   return oldsz;
 }
 
@@ -573,7 +571,7 @@ sys_munmap(void)
   argaddr(1, &len);
   //find the vma you free
   for(i = 0; i < NVMA; i++){
-    if((addr >= p->vmas[i].addr) && (addr <= (p->vmas[i].addr + p->vmas[i].len)))
+    if((addr >= p->vmas[i].addr) && (addr < (p->vmas[i].addr + p->vmas[i].len)))
       break;
   }
 
@@ -583,17 +581,14 @@ sys_munmap(void)
       if(p->vmas[i].flags && MAP_SHARED){
         filewrite(p->vmas[i].f, addr+PGSIZE*j, PGSIZE);
       }
-      //printf("sys_munmap:pa != 0 %p,%p\n",addr+PGSIZE*j,pa);
       uvmunmap(p->pagetable, addr+PGSIZE*j, 1, 1);
-    }else{
+    } else {
       uvmunmap(p->pagetable, addr+PGSIZE*j, 1, 0);
     }
-    //p->sz -= PGSIZE;
-   // printf("%p\n",p->sz);
   }
-  if(len == p->vmas[i].len - p->vmas[i].ummap){
-   // printf("unmmap totally!\n");
-    //printf("p->sz %p\n",p->sz);
+  if(len == (p->vmas[i].len - p->vmas[i].ummap)){
+    p->sz -= p->vmas[i].len;
+    //printf("munmap totally! sz:%p\n",p->sz);
     fileclose(p->vmas[i].f);
     p->vmas[i].addr = 0;
     p->vmas[i].f = 0;
@@ -602,11 +597,10 @@ sys_munmap(void)
     p->vmas[i].len = 0;
     p->vmas[i].offset = 0;
     p->vmas[i].prot = 0;
-  }else{
+    p->vmas[i].ummap = 0;
+  } else {
     p->vmas[i].ummap += len;
-    //p->vmas[i].offset = 
-    //p->vmas[i].addr = addr + len;
-    //p->vmas[i].len -= len;
+    //printf("ummap: %p\n", p->vmas[i].ummap+p->vmas[i].addr);
   }
   return 0;
 }

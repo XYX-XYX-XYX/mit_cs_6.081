@@ -277,7 +277,7 @@ fork_test(void)
   char *p2 = mmap(0, PGSIZE*2, PROT_READ, MAP_SHARED, fd, 0);
   if (p2 == MAP_FAILED)
     err("mmap (8)");
- // printf("map twice!\n");
+  //printf("map twice!\n");
   //_v1(p1);
   //_v1(p2);
   // read just 2nd page.

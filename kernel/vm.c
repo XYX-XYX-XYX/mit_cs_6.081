@@ -194,7 +194,7 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
       uint64 pa = PTE2PA(*pte);
       kfree((void*)pa);
     }
-    *pte = 0;
+     *pte = 0;
   }
 }
 
@@ -322,14 +322,10 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
-    {
-      printf("%p,%p\n",i,*pte);
       panic("uvmcopy: page not present");
-    }
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
     if(pa == 0){
-      //printf("uvmcopy:%p\n",i);
       pte = walk(new, i, 1);
       *pte = PA2PTE(0) | PTE_V | PTE_U;
     } else {
