@@ -73,6 +73,9 @@ usertrap(void)
     // ok
   } else if(r_scause() == 13 || r_scause() == 15){
     uint64 va = r_stval();
+    if (va < p->trapframe->sp || va >= p->sz) {
+      goto exception;
+    }
     va = PGROUNDDOWN(va);
     char *pa = (char*)kalloc();
     pte_t *pte = walk(p->pagetable, va, 0);
@@ -97,6 +100,7 @@ usertrap(void)
       }
     }
   } else {
+    exception:
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     setkilled(p);
