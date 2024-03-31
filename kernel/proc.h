@@ -85,6 +85,7 @@ struct vma{
   uint64 addr;
   uint64 len;
   uint64 offset;
+  uint64 ummap;
   int prot;
   int flags;
   int fd;

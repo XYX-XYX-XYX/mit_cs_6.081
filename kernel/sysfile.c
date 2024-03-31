@@ -521,13 +521,15 @@ sys_mmap(void)
   argaddr(5, (uint64*)&offset);
   if((argfd(4, &fd, &f)) == -1)
     return -1;
+  //printf("sys_mmap %d %p\n",fd, f);
   //doesn't allow read/write mapping of a 
   //file opened read-only.
   if(!f->writable && (flags & MAP_SHARED) &&(prot & PROT_WRITE)) return -1;
   //find unused address space and map it to pa 0;
   uint64 oldsz = PGROUNDUP(proc->sz);
   uint64 newsz = oldsz;
-  proc->sz += oldsz + len;
+  //printf("%p,%p,%p\n",proc->sz, oldsz, oldsz + len);
+  proc->sz = oldsz + len;
   pte_t *pte;
   for(size_t i = len; i > 0; i -= PGSIZE){
     pte = walk(proc->pagetable, newsz, 1);
@@ -552,7 +554,7 @@ sys_mmap(void)
   vma->offset = offset;
   vma->f = f;
   filedup(f);
-
+  //printf("sys_mmap: %d\n",f->ref);
   return oldsz;
 }
 
@@ -574,19 +576,24 @@ sys_munmap(void)
     if((addr >= p->vmas[i].addr) && (addr <= (p->vmas[i].addr + p->vmas[i].len)))
       break;
   }
+
   for(int j = 0; j < len/PGSIZE; j++){
     uint64 pa = walkaddr(p->pagetable, addr+j*PGSIZE);
     if(pa){
       if(p->vmas[i].flags && MAP_SHARED){
         filewrite(p->vmas[i].f, addr+PGSIZE*j, PGSIZE);
       }
+      //printf("sys_munmap:pa != 0 %p,%p\n",addr+PGSIZE*j,pa);
       uvmunmap(p->pagetable, addr+PGSIZE*j, 1, 1);
     }else{
       uvmunmap(p->pagetable, addr+PGSIZE*j, 1, 0);
     }
+    //p->sz -= PGSIZE;
+   // printf("%p\n",p->sz);
   }
-  if(len == p->vmas[i].len){
-    printf("unmmap totally!\n");
+  if(len == p->vmas[i].len - p->vmas[i].ummap){
+   // printf("unmmap totally!\n");
+    //printf("p->sz %p\n",p->sz);
     fileclose(p->vmas[i].f);
     p->vmas[i].addr = 0;
     p->vmas[i].f = 0;
@@ -596,8 +603,10 @@ sys_munmap(void)
     p->vmas[i].offset = 0;
     p->vmas[i].prot = 0;
   }else{
-    p->vmas[i].addr = addr + len;
-    p->vmas[i].len -= len;
+    p->vmas[i].ummap += len;
+    //p->vmas[i].offset = 
+    //p->vmas[i].addr = addr + len;
+    //p->vmas[i].len -= len;
   }
   return 0;
 }

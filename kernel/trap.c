@@ -73,27 +73,31 @@ usertrap(void)
     // ok
   } else if(r_scause() == 13 || r_scause() == 15){
     uint64 va = r_stval();
-    //printf("enter usertrap! %p\n",va);
     va = PGROUNDDOWN(va);
     char *pa = (char*)kalloc();
     pte_t *pte = walk(p->pagetable, va, 0);
     *pte = PA2PTE(pa) | PTE_U | PTE_V;
     // find the fd
     for(int i = 0; i < NVMA; i++){
-      if(va == p->vmas[i].addr + p->vmas[i].offset){
+      if((va >= p->vmas[i].addr) && (va < p->vmas[i].addr + p->vmas[i].len) ){
         struct file *f = p->vmas[i].f;
         if(p->vmas[i].prot & PROT_READ) *pte = *pte | PTE_R;
         if(p->vmas[i].prot & PROT_WRITE) *pte = *pte | PTE_W;
+        //printf("enter usertrap! %p %d %p\n",va,p->pid,*pte);
         //*pte = *pte | p->vmas->prot;
         ilock(f->ip);
+        p->vmas[i].offset = va - p->vmas[i].addr;
         int total = readi(f->ip, 0, (uint64)pa, p->vmas[i].offset, PGSIZE);
-        //printf("%d\n",total);
+        //printf("trap():%d\n",f->off);
+        //printf("trap():offset: %p total:%d\n",p->vmas[i].offset,total);
         p->vmas[i].offset += total;
         if(total != PGSIZE){
+          //if(total == 0)printf("trap:total == 0\n");
           memset((void*)pa+total, 0, PGSIZE - total);
           p->vmas[i].offset += PGSIZE - total;
         }
         iunlock(f->ip);
+        //p->vmas[i].offset = p->vmas[i].len;
         break;
       }
     }

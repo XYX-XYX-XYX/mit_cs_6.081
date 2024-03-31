@@ -273,26 +273,34 @@ fork_test(void)
   char *p1 = mmap(0, PGSIZE*2, PROT_READ, MAP_SHARED, fd, 0);
   if (p1 == MAP_FAILED)
     err("mmap (7)");
+  //printf("map first!\n");
   char *p2 = mmap(0, PGSIZE*2, PROT_READ, MAP_SHARED, fd, 0);
   if (p2 == MAP_FAILED)
     err("mmap (8)");
-
+ // printf("map twice!\n");
+  //_v1(p1);
+  //_v1(p2);
   // read just 2nd page.
   if(*(p1+PGSIZE) != 'A')
     err("fork mismatch (1)");
+  //printf("read success!\n");
 
   if((pid = fork()) < 0)
     err("fork");
+  //printf("%d\n",pid);
   if (pid == 0) {
     _v1(p1);
+    //_v1(p2);
+    //printf("check right!\n");
     if (munmap(p1, PGSIZE) == -1) // just the first page
       err("munmap (7)");
+    //printf("munmap right !\n");
     exit(0); // tell the parent that the mapping looks OK.
   }
 
   int status = -1;
   wait(&status);
-
+  //printf("child exit!\n");
   if(status != 0){
     printf("fork_test failed\n");
     exit(1);
@@ -300,6 +308,7 @@ fork_test(void)
 
   // check that the parent's mappings are still there.
   _v1(p1);
+  //printf("p1 is right!\n");
   _v1(p2);
 
   printf("fork_test OK\n");

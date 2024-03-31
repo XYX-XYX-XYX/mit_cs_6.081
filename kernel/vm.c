@@ -317,19 +317,29 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   uint flags;
   char *mem;
 
+  //printf("%p\n",sz);
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
+    {
+      printf("%p,%p\n",i,*pte);
       panic("uvmcopy: page not present");
+    }
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
-      goto err;
+    if(pa == 0){
+      //printf("uvmcopy:%p\n",i);
+      pte = walk(new, i, 1);
+      *pte = PA2PTE(0) | PTE_V | PTE_U;
+    } else {
+      if((mem = kalloc()) == 0)
+        goto err;
+      memmove(mem, (char*)pa, PGSIZE);
+      if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
+        kfree(mem);
+        goto err;
+      }
     }
   }
   return 0;

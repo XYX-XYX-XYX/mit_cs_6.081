@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "fcntl.h"
 
 struct cpu cpus[NCPU];
 
@@ -308,6 +309,14 @@ fork(void)
       np->ofile[i] = filedup(p->ofile[i]);
   np->cwd = idup(p->cwd);
 
+  for(i = 0; i < NVMA; i++){
+    if(p->vmas[i].addr){
+      filedup(p->vmas[i].f);
+      np->vmas[i] = p->vmas[i];
+      //printf("fork:%p,%p,%p\n",np->vmas[i].addr,np->vmas[i].len,np->vmas[i].offset);
+    }
+  }
+
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;
@@ -360,6 +369,37 @@ exit(int status)
     }
   }
 
+  for(int i = 0; i < NVMA; i++){
+    if(p->vmas[i].addr){
+      uint64 addr = p->vmas[i].addr;
+      int len = p->vmas[i].len;
+      //printf("exit(): %p %d %d %d\n",addr,len,i,p->pid);
+      for(int j = 0; j < len/PGSIZE; j++){
+        uint64 pa = walkaddr(p->pagetable, addr+j*PGSIZE);
+        pte_t *pte = walk(p->pagetable, addr+j*PGSIZE, 0);
+        if(pa){
+          if(p->vmas[i].flags && MAP_SHARED){
+            filewrite(p->vmas[i].f, addr+PGSIZE*j, PGSIZE);
+          }
+          //printf("exit() pa!=0,%p,%p\n",addr+PGSIZE*j,*pte);
+          uvmunmap(p->pagetable, addr+PGSIZE*j, 1, 1);
+        }else if(*pte != 0){
+          //printf("exit() pte!=0,%p,%p\n",addr+PGSIZE*j,*pte);
+          uvmunmap(p->pagetable, addr+PGSIZE*j, 1, 0);
+        }
+      }
+      fileclose(p->vmas[i].f);
+      //printf("exit():unmmap totally!\n");
+      if(p->sz > p->vmas[i].addr) p->sz = p->vmas[i].addr;
+      p->vmas[i].addr = 0;
+      p->vmas[i].f = 0;
+      p->vmas[i].fd = 0;
+      p->vmas[i].flags = 0;
+      p->vmas[i].len = 0;
+      p->vmas[i].offset = 0;
+      p->vmas[i].prot = 0;
+    }
+  }
   begin_op();
   iput(p->cwd);
   end_op();

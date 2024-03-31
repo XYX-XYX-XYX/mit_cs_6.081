@@ -51,6 +51,7 @@ filedup(struct file *f)
   if(f->ref < 1)
     panic("filedup");
   f->ref++;
+  //printf("filedup:%d\n",f->ref);
   release(&ftable.lock);
   return f;
 }
