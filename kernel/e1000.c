@@ -106,8 +106,6 @@ e1000_transmit(struct mbuf *m)
   acquire(&e1000_lock);
 
   int offset = regs[E1000_TDT];
-  if(offset >= TX_RING_SIZE)
-    offset = offset % TX_RING_SIZE;
   
   struct tx_desc *tx_tail = tx_ring+offset;
   if((tx_tail->status & E1000_TXD_STAT_DD) != 1){
@@ -120,7 +118,7 @@ e1000_transmit(struct mbuf *m)
   tx_tail->length = m->len;
   tx_tail->cmd = E1000_TXD_CMD_RS | E1000_TXD_CMD_EOP;
   tx_tail->status = 0;
-  regs[E1000_TDT] += 1;
+  regs[E1000_TDT] = (offset + 1) % RX_RING_SIZE;
   release(&e1000_lock);
 
   //printf("done e1000_transmit\n");
@@ -140,9 +138,8 @@ e1000_recv(void)
   //printf("Into e1000_recv\n");
   //acquire(&e1000_lock);
   while(1){
-      int tail = regs[E1000_RDT] + 1;
-      if(tail >= RX_RING_SIZE) tail = tail % RX_RING_SIZE;
-        while(tail == regs[E1000_RDH]);
+      int tail = (regs[E1000_RDT] + 1) % RX_RING_SIZE;
+        //while(tail == regs[E1000_RDH]);
         struct rx_desc *rx_tail = rx_ring+tail;
         if((rx_tail->status & E1000_RXD_STAT_DD) != 1) break;
         rx_mbufs[tail]->len = rx_tail->length;
